@@ -6,8 +6,8 @@ namespace RoslynPad.UI
 {
     internal abstract class TelemetryProviderBase : ITelemetryProvider
     {
-        private TelemetryClient _client;
-        private Exception _lastError;
+        private TelemetryClient? _client;
+        private Exception? _lastError;
 
         public virtual void Initialize(string version, IApplicationSettings settings)
         {
@@ -37,9 +37,9 @@ namespace RoslynPad.UI
 
         protected abstract string GetInstrumentationKey();
 
-        private void TaskSchedulerOnUnobservedTaskException(object sender, UnobservedTaskExceptionEventArgs args)
+        private void TaskSchedulerOnUnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs args)
         {
-            HandleException(args.Exception.Flatten().InnerException);
+            HandleException(args.Exception!.Flatten().InnerException!);
         }
 
         private void CurrentDomainOnUnhandledException(object sender, UnhandledExceptionEventArgs args)
@@ -64,7 +64,7 @@ namespace RoslynPad.UI
             HandleException(exception);
         }
 
-        public Exception LastError
+        public Exception? LastError
         {
             get => _lastError;
             private set
@@ -74,7 +74,7 @@ namespace RoslynPad.UI
             }
         }
 
-        public event Action LastErrorChanged;
+        public event Action? LastErrorChanged;
 
         public void ClearLastError()
         {

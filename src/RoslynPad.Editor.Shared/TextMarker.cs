@@ -22,7 +22,7 @@ namespace RoslynPad.Editor
             Length = length;
         }
 
-        public event EventHandler Deleted;
+        public event EventHandler? Deleted;
 
         public bool IsDeleted => !IsConnectedToCollection;
 
@@ -97,7 +97,7 @@ namespace RoslynPad.Editor
             }
         }
 
-        public object Tag { get; set; }
+        public object? Tag { get; set; }
 
         private Color _markerColor;
 
@@ -113,6 +113,6 @@ namespace RoslynPad.Editor
             }
         }
 
-        public object ToolTip { get; set; }
+        public object? ToolTip { get; set; }
     }
 }

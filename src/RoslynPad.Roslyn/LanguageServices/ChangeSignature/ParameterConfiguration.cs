@@ -5,7 +5,7 @@ namespace RoslynPad.Roslyn.LanguageServices.ChangeSignature
 {
     internal sealed class ParameterConfiguration
     {
-        private readonly Microsoft.CodeAnalysis.ChangeSignature.ParameterConfiguration _inner;
+        private readonly Microsoft.CodeAnalysis.ChangeSignature.ParameterConfiguration? _inner;
 
         public ParameterConfiguration(Microsoft.CodeAnalysis.ChangeSignature.ParameterConfiguration inner)
         {
@@ -14,26 +14,29 @@ namespace RoslynPad.Roslyn.LanguageServices.ChangeSignature
             ParametersWithoutDefaultValues = inner.ParametersWithoutDefaultValues;
             RemainingEditableParameters = inner.RemainingEditableParameters;
             ParamsParameter = inner.ParamsParameter;
+            SelectedIndex = inner.SelectedIndex;
         }
 
-        public ParameterConfiguration(IParameterSymbol thisParameter, List<IParameterSymbol> parametersWithoutDefaultValues, List<IParameterSymbol> remainingEditableParameters, IParameterSymbol paramsParameter)
+        public ParameterConfiguration(IParameterSymbol thisParameter, List<IParameterSymbol> parametersWithoutDefaultValues, List<IParameterSymbol> remainingEditableParameters, IParameterSymbol? paramsParameter, int selectedIndex)
         {
             ThisParameter = thisParameter;
             ParametersWithoutDefaultValues = parametersWithoutDefaultValues;
             RemainingEditableParameters = remainingEditableParameters;
             ParamsParameter = paramsParameter;
+            SelectedIndex = selectedIndex;
         }
 
         public IParameterSymbol ThisParameter { get; }
         public List<IParameterSymbol> ParametersWithoutDefaultValues { get; }
         public List<IParameterSymbol> RemainingEditableParameters { get; }
-        public IParameterSymbol ParamsParameter { get; }
+        public IParameterSymbol? ParamsParameter { get; }
+        public int SelectedIndex { get; set; }
 
         internal Microsoft.CodeAnalysis.ChangeSignature.ParameterConfiguration ToInternal()
         {
             return _inner ??
                    new Microsoft.CodeAnalysis.ChangeSignature.ParameterConfiguration(ThisParameter,
-                       ParametersWithoutDefaultValues, RemainingEditableParameters, ParamsParameter);
+                       ParametersWithoutDefaultValues, RemainingEditableParameters, ParamsParameter, SelectedIndex);
         }
     }
 }

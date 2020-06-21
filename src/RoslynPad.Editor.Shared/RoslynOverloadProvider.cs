@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Threading;
 #if AVALONIA
 using Avalonia.Controls;
+using Avalonia.Layout;
 using CommonFontWeights = Avalonia.Media.FontWeight;
 #else
 using System.Windows;
@@ -19,10 +20,10 @@ namespace RoslynPad.Editor
         private readonly IList<SignatureHelpItem> _items;
 
         private int _selectedIndex;
-        private SignatureHelpItem _item;
-        private object _currentHeader;
-        private object _currentContent;
-        private string _currentIndexText;
+        private SignatureHelpItem? _item;
+        private object? _currentHeader;
+        private object? _currentContent;
+        private string? _currentIndexText;
 
         public RoslynOverloadProvider(SignatureHelpItems signatureHelp)
         {
@@ -57,6 +58,7 @@ namespace RoslynPad.Editor
                 }
             };
             var contentPanel = new StackPanel();
+
             var docText = _item.DocumentationFactory(CancellationToken.None).ToTextBlock();
             if (HasContent(docText))
             {
@@ -67,12 +69,13 @@ namespace RoslynPad.Editor
                 for (var index = 0; index < _item.Parameters.Length; index++)
                 {
                     var param = _item.Parameters[index];
-                    AddParameterSignatureHelp(index, param, headerPanel, contentPanel);
+                    AddParameterSignatureHelp(_item, index, param, headerPanel, contentPanel);
                 }
             }
             headerPanel.Children.Add(_item.SuffixDisplayParts.ToTextBlock());
             CurrentHeader = headerPanel;
             CurrentContent = contentPanel;
+            CurrentIndexText = $" {_selectedIndex + 1} of {_items.Count} ";
         }
 
 #if AVALONIA
@@ -81,13 +84,13 @@ namespace RoslynPad.Editor
         private bool HasContent(TextBlock textBlock) => textBlock?.Inlines.Count > 0;
 #endif       
 
-        private void AddParameterSignatureHelp(int index, SignatureHelpParameter param, Panel headerPanel, Panel contentPanel)
+        private void AddParameterSignatureHelp(SignatureHelpItem item, int index, SignatureHelpParameter param, Panel headerPanel, Panel contentPanel)
         {
             var isSelected = _signatureHelp.ArgumentIndex == index;
             headerPanel.Children.Add(param.DisplayParts.ToTextBlock(isBold: isSelected));
-            if (index != _item.Parameters.Length - 1)
+            if (index != item.Parameters.Length - 1)
             {
-                headerPanel.Children.Add(_item.SeparatorDisplayParts.ToTextBlock());
+                headerPanel.Children.Add(item.SeparatorDisplayParts.ToTextBlock());
             }
             if (isSelected)
             {
@@ -110,19 +113,22 @@ namespace RoslynPad.Editor
         public int Count => _items.Count;
 
         // ReSharper disable once UnusedMember.Local
-        public string CurrentIndexText
+        public string? CurrentIndexText
         {
-            get => _currentIndexText; private set => SetProperty(ref _currentIndexText, value);
+            get => _currentIndexText;
+            private set => SetProperty(ref _currentIndexText, value);
         }
 
-        public object CurrentHeader
+        public object? CurrentHeader
         {
-            get => _currentHeader; private set => SetProperty(ref _currentHeader, value);
+            get => _currentHeader;
+            private set => SetProperty(ref _currentHeader, value);
         }
 
-        public object CurrentContent
+        public object? CurrentContent
         {
-            get => _currentContent; private set => SetProperty(ref _currentContent, value);
+            get => _currentContent;
+            private set => SetProperty(ref _currentContent, value);
         }
     }
 }

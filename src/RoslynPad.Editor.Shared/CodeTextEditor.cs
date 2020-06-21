@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 #if AVALONIA
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Media;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -16,11 +17,11 @@ using AvaloniaEdit.Editing;
 using AvaloniaEdit.Highlighting;
 using Brush = Avalonia.Media.IBrush;
 using MouseEventArgs = Avalonia.Input.PointerEventArgs;
-using ModifierKeys = Avalonia.Input.InputModifiers;
 using TextCompositionEventArgs = Avalonia.Input.TextInputEventArgs;
 using RoutingStrategy = Avalonia.Interactivity.RoutingStrategies;
 using CommandBinding = AvaloniaEdit.RoutedCommandBinding;
 using AvalonEditCommands = AvaloniaEdit.AvaloniaEditCommands;
+using ModifierKeys = Avalonia.Input.KeyModifiers;
 #else
 using System.Windows;
 using System.Windows.Controls;
@@ -36,18 +37,11 @@ using ICSharpCode.AvalonEdit.Highlighting;
 
 namespace RoslynPad.Editor
 {
-    public class CodeTextEditor : TextEditor
-#if AVALONIA
-        , IStyleable
-#endif
+    public partial class CodeTextEditor : TextEditor
     {
-        private CustomCompletionWindow _completionWindow;
-        private OverloadInsightWindow _insightWindow;
-        private ToolTip _toolTip;
-
-#if AVALONIA
-        Type IStyleable.StyleKey => typeof(TextEditor);
-#endif
+        private CustomCompletionWindow? _completionWindow;
+        private OverloadInsightWindow? _insightWindow;
+        private ToolTip? _toolTip;
 
         public CodeTextEditor()
         {
@@ -59,29 +53,9 @@ namespace RoslynPad.Editor
                 EnableEmailHyperlinks = false,
             };
 
-            // TODO: remove this after bug fix
-#if AVALONIA
-            var lineMargin = new LineNumberMargin { Margin = new Thickness(0, 0, 10, 0) };
-            lineMargin[~TextBlock.ForegroundProperty] = this[~LineNumbersForegroundProperty];
-            TextArea.LeftMargins.Insert(0, lineMargin);
-#else
-            ShowLineNumbers = true;
-#endif
-
             TextArea.TextView.VisualLinesChanged += OnVisualLinesChanged;
             TextArea.TextEntering += OnTextEntering;
             TextArea.TextEntered += OnTextEntered;
-
-#if AVALONIA
-            PointerHover += OnMouseHover;
-            PointerHoverStopped += OnMouseHoverStopped;
-#else
-            MouseHover += OnMouseHover;
-            MouseHoverStopped += OnMouseHoverStopped;
-
-            ToolTipService.SetInitialShowDelay(this, 0);
-            SearchReplacePanel.Install(this);
-#endif
 
             var commandBindings = TextArea.CommandBindings;
             var deleteLineCommand = commandBindings.OfType<CommandBinding>().FirstOrDefault(x =>
@@ -94,12 +68,16 @@ namespace RoslynPad.Editor
             var contextMenu = new ContextMenu();
             contextMenu.SetItems(new[]
             {
-                new MenuItem {Command = ApplicationCommands.Cut},
-                new MenuItem {Command = ApplicationCommands.Copy},
-                new MenuItem {Command = ApplicationCommands.Paste}
+                new MenuItem { Command = ApplicationCommands.Cut },
+                new MenuItem { Command = ApplicationCommands.Copy },
+                new MenuItem { Command = ApplicationCommands.Paste }
             });
             ContextMenu = contextMenu;
+
+            Initialize();
         }
+
+        partial void Initialize();
 
         public static readonly StyledProperty<Brush> CompletionBackgroundProperty = CommonProperty.Register<CodeTextEditor, Brush>(
             nameof(CompletionBackground), CreateDefaultCompletionBackground());
@@ -162,7 +140,7 @@ namespace RoslynPad.Editor
         public static readonly RoutedEvent ToolTipRequestEvent = CommonEvent.Register<CodeTextEditor, ToolTipRequestEventArgs>(
             nameof(ToolTipRequest), RoutingStrategy.Bubble);
 
-        public Func<ToolTipRequestEventArgs, Task> AsyncToolTipRequest { get; set; }
+        public Func<ToolTipRequestEventArgs, Task>? AsyncToolTipRequest { get; set; }
 
         public event EventHandler<ToolTipRequestEventArgs> ToolTipRequest
         {
@@ -170,12 +148,12 @@ namespace RoslynPad.Editor
             remove => RemoveHandler(ToolTipRequestEvent, value);
         }
 
-        private void OnVisualLinesChanged(object sender, EventArgs e)
+        private void OnVisualLinesChanged(object? sender, EventArgs e)
         {
             _toolTip?.Close(this);
         }
 
-        private void OnMouseHoverStopped(object sender, MouseEventArgs e)
+        private void OnMouseHoverStopped(object? sender, MouseEventArgs e)
         {
             if (_toolTip != null)
             {
@@ -217,16 +195,15 @@ namespace RoslynPad.Editor
                 }
             }
 
-            if (args.ContentToShow == null) return;
+            if (args.ContentToShow == null)
+            {
+                return;
+            }
 
             if (_toolTip == null)
             {
                 _toolTip = new ToolTip { MaxWidth = 400 };
-#if !AVALONIA
-                _toolTip.Closed += (o, a) => _toolTip = null;
-                ToolTipService.SetInitialShowDelay(_toolTip, 0);
-                _toolTip.PlacementTarget = this; // required for property inheritance
-#endif
+                InitializeToolTip();
             }
 
             if (args.ContentToShow is string stringContent)
@@ -239,15 +216,21 @@ namespace RoslynPad.Editor
             }
             else
             {
-                _toolTip.SetContent(this, args.ContentToShow);
+                _toolTip.SetContent(this, new ContentPresenter
+                {
+                    Content = args.ContentToShow,
+                    MaxWidth = 400
+                });
             }
 
             e.Handled = true;
             _toolTip.Open(this);
-#if AVALONIA
-            _toolTip.InvalidateVisual();
-#endif
+
+            AfterToolTipOpen();
         }
+
+        partial void InitializeToolTip();
+        partial void AfterToolTipOpen();
 
         #region Open & Save File
 
@@ -282,7 +265,7 @@ namespace RoslynPad.Editor
 
         #region Code Completion
 
-        public ICodeEditorCompletionProvider CompletionProvider { get; set; }
+        public ICodeEditorCompletionProvider? CompletionProvider { get; set; }
 
         private void OnTextEntered(object sender, TextCompositionEventArgs e)
         {
@@ -305,7 +288,7 @@ namespace RoslynPad.Editor
             {
                 results.OverloadProvider.Refresh();
 
-                if (_insightWindow.IsOpen())
+                if (_insightWindow != null && _insightWindow.IsOpen())
                 {
                     _insightWindow.Provider = results.OverloadProvider;
                 }
@@ -314,12 +297,10 @@ namespace RoslynPad.Editor
                     _insightWindow = new OverloadInsightWindow(TextArea)
                     {
                         Provider = results.OverloadProvider,
-                        Background = CompletionBackground,
-                        // TODO: style
-#if !AVALONIA
-                        Style = TryFindResource(typeof(InsightWindow)) as Style
-#endif
+                        //Background = CompletionBackground,
                     };
+
+                    InitializeInsightWindow();
 
                     _insightWindow.Closed += (o, args) => _insightWindow = null;
                     _insightWindow.Show();
@@ -327,7 +308,7 @@ namespace RoslynPad.Editor
                 return;
             }
 
-            if (!_completionWindow.IsOpen() && results.CompletionData?.Any() == true)
+            if (_completionWindow?.IsOpen() != true && results.CompletionData != null && results.CompletionData.Any())
             {
                 _insightWindow?.Close();
 
@@ -335,12 +316,11 @@ namespace RoslynPad.Editor
                 _completionWindow = new CustomCompletionWindow(TextArea)
                 {
                     MinWidth = 300,
-#if !AVALONIA
-                    Background = CompletionBackground,
-#endif
                     CloseWhenCaretAtBeginning = triggerMode == TriggerMode.Completion || triggerMode == TriggerMode.Text,
                     UseHardSelection = results.UseHardSelection,
                 };
+
+                InitializeCompletionWindow();
 
                 if (completionChar != null && char.IsLetterOrDigit(completionChar.Value))
                 {
@@ -348,30 +328,42 @@ namespace RoslynPad.Editor
                 }
 
                 var data = _completionWindow.CompletionList.CompletionData;
-                ICompletionDataEx selected = null;
+                ICompletionDataEx? selected = null;
                 foreach (var completion in results.CompletionData)
                 {
                     if (completion.IsSelected)
                     {
                         selected = completion;
                     }
+
                     data.Add(completion);
                 }
 
-                _completionWindow.CompletionList.SelectedItem = selected;
+                try
+                {
+                    _completionWindow.CompletionList.SelectedItem = selected;
+                }
+                catch (Exception)
+                {
+                    // TODO-AV: Fix this in AvaloniaEdit
+                }
 
                 _completionWindow.Closed += (o, args) => { _completionWindow = null; };
                 _completionWindow.Show();
             }
         }
 
+        partial void InitializeInsightWindow();
+
+        partial void InitializeCompletionWindow();
+
         private void OnTextEntering(object sender, TextCompositionEventArgs args)
         {
             if (args.Text.Length > 0 && _completionWindow != null)
             {
-                if (!char.IsLetterOrDigit(args.Text[0]))
+                if (!IsCharIdentifier(args.Text[0]))
                 {
-                    // Whenever a non-letter is typed while the completion window is open,
+                    // Whenever no identifier letter is typed while the completion window is open,
                     // insert the currently selected element.
                     _completionWindow.CompletionList.RequestInsertion(args);
                 }
@@ -379,7 +371,15 @@ namespace RoslynPad.Editor
             // Do not set e.Handled=true.
             // We still want to insert the character that was typed.
         }
-
+        /// <summary>
+        /// Checks if a provided char is a well-known identifier
+        /// </summary>
+        /// <param name="c">The charcater to check</param>
+        /// <returns><c>true</c> if <paramref name="c"/> is a well-known identifier.</returns>
+        private bool IsCharIdentifier(char c)
+        {
+            return char.IsLetterOrDigit(c) || c == '_';
+        }
         /// <summary>
         /// Gets the document used for code completion, can be overridden to provide a custom document
         /// </summary>
@@ -393,41 +393,20 @@ namespace RoslynPad.Editor
 
         #endregion
 
-        private class CustomCompletionWindow : CompletionWindow
+        private partial class CustomCompletionWindow : CompletionWindow
         {
             private bool _isSoftSelectionActive;
-            private KeyEventArgs _keyDownArgs;
+            private KeyEventArgs? _keyDownArgs;
 
             public CustomCompletionWindow(TextArea textArea) : base(textArea)
             {
                 _isSoftSelectionActive = true;
                 CompletionList.SelectionChanged += CompletionListOnSelectionChanged;
-                CompletionList.ListBox.SetBorderThickness(
-// TODO: find a better way
-#if AVALONIA
-                    1
-#else
-                    0
-#endif
-                    );
 
-#if AVALONIA
-                CompletionList.ListBox.PointerPressed +=
-#else
-                CompletionList.ListBox.PreviewMouseDown +=
-#endif
-                    (o, e) => _isSoftSelectionActive = false;
+                Initialize();
             }
 
-#if AVALONIA
-            protected override void DetachEvents()
-            {
-                // TODO: temporary workaround until SetParent(null) is removed
-                var selected = CompletionList.SelectedItem;
-                base.DetachEvents();
-                CompletionList.SelectedItem = selected;
-            }
-#endif
+            partial void Initialize();
 
             private void CompletionListOnSelectionChanged(object sender, SelectionChangedEventArgs args)
             {

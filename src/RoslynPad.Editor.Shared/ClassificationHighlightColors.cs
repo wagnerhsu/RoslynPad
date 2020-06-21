@@ -1,9 +1,12 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 #if AVALONIA
 using Avalonia.Media;
 using AvaloniaEdit.Highlighting;
+using FontWeights = Avalonia.Media.FontWeight;
 #else
+using System.Windows;
 using System.Windows.Media;
 using ICSharpCode.AvalonEdit.Highlighting;
 #endif
@@ -16,19 +19,22 @@ namespace RoslynPad.Editor
         public HighlightingColor DefaultBrush { get; protected set; } = new HighlightingColor { Foreground = new SimpleHighlightingBrush(Colors.Black) };
 
         public HighlightingColor TypeBrush { get; protected set; } = new HighlightingColor { Foreground = new SimpleHighlightingBrush(Colors.Teal) };
+        public HighlightingColor MethodBrush { get; protected set; } = new HighlightingColor { Foreground = new SimpleHighlightingBrush(Colors.Olive) };
         public HighlightingColor CommentBrush { get; protected set; } = new HighlightingColor { Foreground = new SimpleHighlightingBrush(Colors.Green) };
         public HighlightingColor XmlCommentBrush { get; protected set; } = new HighlightingColor { Foreground = new SimpleHighlightingBrush(Colors.Gray) };
         public HighlightingColor KeywordBrush { get; protected set; } = new HighlightingColor { Foreground = new SimpleHighlightingBrush(Colors.Blue) };
         public HighlightingColor PreprocessorKeywordBrush { get; protected set; } = new HighlightingColor { Foreground = new SimpleHighlightingBrush(Colors.Gray) };
         public HighlightingColor StringBrush { get; protected set; } = new HighlightingColor { Foreground = new SimpleHighlightingBrush(Colors.Maroon) };
-        public HighlightingColor BraceMatchingBrush { get; protected set; } = new HighlightingColor { Foreground = new SimpleHighlightingBrush(Colors.Black), Background = new SimpleHighlightingBrush(Color.FromArgb(150, 219, 224, 204))};
+        public HighlightingColor BraceMatchingBrush { get; protected set; } = new HighlightingColor { Foreground = new SimpleHighlightingBrush(Colors.Black), Background = new SimpleHighlightingBrush(Color.FromArgb(150, 219, 224, 204)) };
+        public HighlightingColor StaticSymbolBrush { get; protected set; } = new HighlightingColor { FontWeight = FontWeights.Bold };
 
         public const string BraceMatchingClassificationTypeName = "brace matching";
 
-        private ImmutableDictionary<string, HighlightingColor> _map;
-        protected virtual ImmutableDictionary<string, HighlightingColor> GetOrCreateMap()
+        private readonly Lazy<ImmutableDictionary<string, HighlightingColor>> _map;
+
+        public ClassificationHighlightColors()
         {
-            return _map ?? (_map = new Dictionary<string, HighlightingColor>
+            _map = new Lazy<ImmutableDictionary<string, HighlightingColor>>(() => new Dictionary<string, HighlightingColor>
             {
                 [ClassificationTypeNames.ClassName] = AsFrozen(TypeBrush),
                 [ClassificationTypeNames.StructName] = AsFrozen(TypeBrush),
@@ -37,7 +43,9 @@ namespace RoslynPad.Editor
                 [ClassificationTypeNames.EnumName] = AsFrozen(TypeBrush),
                 [ClassificationTypeNames.ModuleName] = AsFrozen(TypeBrush),
                 [ClassificationTypeNames.TypeParameterName] = AsFrozen(TypeBrush),
+                [ClassificationTypeNames.MethodName] = AsFrozen(MethodBrush),
                 [ClassificationTypeNames.Comment] = AsFrozen(CommentBrush),
+                [ClassificationTypeNames.StaticSymbol] = AsFrozen(StaticSymbolBrush),
                 [ClassificationTypeNames.XmlDocCommentAttributeName] = AsFrozen(XmlCommentBrush),
                 [ClassificationTypeNames.XmlDocCommentAttributeQuotes] = AsFrozen(XmlCommentBrush),
                 [ClassificationTypeNames.XmlDocCommentAttributeValue] = AsFrozen(XmlCommentBrush),
@@ -49,11 +57,17 @@ namespace RoslynPad.Editor
                 [ClassificationTypeNames.XmlDocCommentProcessingInstruction] = AsFrozen(XmlCommentBrush),
                 [ClassificationTypeNames.XmlDocCommentText] = AsFrozen(CommentBrush),
                 [ClassificationTypeNames.Keyword] = AsFrozen(KeywordBrush),
+                [ClassificationTypeNames.ControlKeyword] = AsFrozen(KeywordBrush),
                 [ClassificationTypeNames.PreprocessorKeyword] = AsFrozen(PreprocessorKeywordBrush),
                 [ClassificationTypeNames.StringLiteral] = AsFrozen(StringBrush),
                 [ClassificationTypeNames.VerbatimStringLiteral] = AsFrozen(StringBrush),
                 [BraceMatchingClassificationTypeName] = AsFrozen(BraceMatchingBrush)
             }.ToImmutableDictionary());
+        }
+
+        protected virtual ImmutableDictionary<string, HighlightingColor> GetOrCreateMap()
+        {
+            return _map.Value;
         }
 
         public HighlightingColor GetBrush(string classificationTypeName)

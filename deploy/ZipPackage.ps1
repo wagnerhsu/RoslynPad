@@ -1,11 +1,25 @@
+PARAM
+(
+    [Switch]
+    $Avalonia
+)
 Add-Type -A 'System.IO.Compression'
 Add-Type -A 'System.IO.Compression.FileSystem'
 
-$location = Get-Location
-$archiveFile = "$location\RoslynPad.zip"
-Remove-Item $archiveFile -ErrorAction Ignore
+$location = $PSScriptRoot
 
-. .\GetFiles.ps1
+if ($Avalonia)
+{
+    . .\GetFilesAvalonia.ps1
+    $archiveFile = "$location\RoslynPadAvalonia.zip"
+}
+else
+{
+    . .\GetFiles.ps1
+    $archiveFile = "$location\RoslynPad.zip"
+}
+
+Remove-Item $archiveFile -ErrorAction Ignore
 
 try
 {
@@ -13,8 +27,7 @@ try
 
 	foreach ($file in $files)
 	{
-		$target = "$location\$binPath\$file"
-		[System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $target, $file) | Out-Null
+		[System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $file, $file.Substring($rootPath.Length).Replace("\", "/")) | Out-Null
 		$file
 	}
 }

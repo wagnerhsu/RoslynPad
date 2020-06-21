@@ -26,7 +26,7 @@ namespace RoslynPad.Editor
         /// <summary>
         /// If set, <see cref="TextEditor.CaretOffset"/> will be updated.
         /// </summary>
-        public TextEditor Editor { get; set; }
+        public TextEditor? Editor { get; set; }
 
         public override SourceText CurrentText => _currentText;
         
@@ -43,7 +43,7 @@ namespace RoslynPad.Editor
             Document.Changed -= DocumentOnChanged;
         }
 
-        private void DocumentOnChanged(object sender, DocumentChangeEventArgs e)
+        private void DocumentOnChanged(object? sender, DocumentChangeEventArgs e)
         {
             if (_updatding) return;
 
@@ -56,7 +56,7 @@ namespace RoslynPad.Editor
             TextChanged?.Invoke(this, new TextChangeEventArgs(oldText, _currentText, textChangeRange));
         }
 
-        public override event EventHandler<TextChangeEventArgs> TextChanged;
+        public override event EventHandler<TextChangeEventArgs>? TextChanged;
 
         public void UpdateText(SourceText newText)
         {
@@ -106,11 +106,14 @@ namespace RoslynPad.Editor
             }
         }
 
-        int IEditorCaretProvider.CaretPosition => Editor.CaretOffset;
+        int IEditorCaretProvider.CaretPosition => Editor?.CaretOffset ?? 0;
 
         bool IEditorCaretProvider.TryMoveCaret(int position)
         {
-            Editor.CaretOffset = position;
+            if (Editor != null)
+            {
+                Editor.CaretOffset = position;
+            }
             return true;
         }
 
@@ -134,7 +137,7 @@ namespace RoslynPad.Editor
                 _sourceText.CopyTo(sourceIndex, destination, destinationIndex, count);
             }
 
-            public override Encoding Encoding => _sourceText.Encoding;
+            public override Encoding? Encoding => _sourceText.Encoding;
 
             public override int Length => _sourceText.Length;
 
@@ -162,7 +165,7 @@ namespace RoslynPad.Editor
 
             public override SourceTextContainer Container => _container ?? _sourceText.Container;
 
-            public override bool Equals(object obj) => _sourceText.Equals(obj);
+            public override bool Equals(object? obj) => _sourceText.Equals(obj);
 
             public override int GetHashCode() => _sourceText.GetHashCode();
 

@@ -1,5 +1,4 @@
 ﻿using System;
-using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -8,6 +7,7 @@ using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using Avalon.Windows.Controls;
 using ICSharpCode.AvalonEdit.Document;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
@@ -20,16 +20,18 @@ namespace RoslynPad
 {
     public partial class DocumentView : IDisposable
     {
-        private readonly SynchronizationContext _syncContext;
-        private readonly ErrorMargin _errorMargin;
+        private readonly SynchronizationContext? _syncContext;
+        private readonly MarkerMargin _errorMargin;
         private OpenDocumentViewModel _viewModel;
-        private IResultObject _contextMenuResultObject;
+        private IResultObject? _contextMenuResultObject;
 
+#pragma warning disable CS8618 // Non-nullable field is uninitialized.
         public DocumentView()
+#pragma warning restore CS8618 // Non-nullable field is uninitialized.
         {
             InitializeComponent();
 
-            _errorMargin = new ErrorMargin { Visibility = Visibility.Collapsed, MarkerBrush = TryFindResource("ExceptionMarker") as Brush, Width = 10 };
+            _errorMargin = new MarkerMargin { Visibility = Visibility.Collapsed, MarkerImage = TryFindResource("ExceptionMarker") as ImageSource, Width = 10 };
             Editor.TextArea.LeftMargins.Insert(0, _errorMargin);
             Editor.PreviewMouseWheel += EditorOnPreviewMouseWheel;
             Editor.TextArea.Caret.PositionChanged += CaretOnPositionChanged;
@@ -39,7 +41,7 @@ namespace RoslynPad
             DataContextChanged += OnDataContextChanged;
         }
 
-        private void CaretOnPositionChanged(object sender, EventArgs eventArgs)
+        private void CaretOnPositionChanged(object? sender, EventArgs eventArgs)
         {
             Ln.Text = Editor.TextArea.Caret.Line.ToString();
             Col.Text = Editor.TextArea.Caret.Column.ToString();
@@ -62,9 +64,11 @@ namespace RoslynPad
         {
             _viewModel = (OpenDocumentViewModel)args.NewValue;
             _viewModel.ResultsAvailable += ResultsAvailable;
+            _viewModel.ReadInput += OnReadInput;
             _viewModel.NuGet.PackageInstalled += NuGetOnPackageInstalled;
 
             _viewModel.EditorFocus += (o, e) => Editor.Focus();
+            _viewModel.DocumentUpdated += (o, e) => Dispatcher.InvokeAsync(() => Editor.RefreshHighlighting());
 
             _viewModel.MainViewModel.EditorFontSizeChanged += OnEditorFontSizeChanged;
             Editor.FontSize = _viewModel.MainViewModel.EditorFontSize;
@@ -81,14 +85,40 @@ namespace RoslynPad
             Editor.Document.TextChanged += (o, e) => _viewModel.OnTextChanged();
         }
 
+        private void OnReadInput()
+        {
+            var textBox = new TextBox();
+
+            var dialog = new TaskDialog
+            {
+                Header = "Console Input",
+                Content = textBox,
+                Background = Brushes.White,
+            };
+
+            textBox.Loaded += (o, e) => textBox.Focus();
+
+            textBox.KeyDown += (o, e) =>
+            {
+                if (e.Key == Key.Enter)
+                {
+                    TaskDialog.CancelCommand.Execute(null, dialog);
+                }
+            };
+
+            dialog.ShowInline(this);
+
+            _viewModel.SendInput(textBox.Text);
+        }
+
         private void ResultsAvailable()
         {
             _viewModel.ResultsAvailable -= ResultsAvailable;
 
-            _syncContext.Post(o => ResultPaneRow.Height = new GridLength(1, GridUnitType.Star), null);
+            _syncContext?.Post(o => ResultPaneRow.Height = new GridLength(1, GridUnitType.Star), null);
         }
 
-        private void OnError(ExceptionResultObject e)
+        private void OnError(ExceptionResultObject? e)
         {
             if (e != null)
             {
@@ -107,24 +137,12 @@ namespace RoslynPad
             Editor.FontSize = fontSize;
         }
 
-        private void NuGetOnPackageInstalled(NuGetInstallResult installResult)
+        private void NuGetOnPackageInstalled(PackageData package)
         {
-            if (installResult.References.Count == 0) return;
-
             Dispatcher.InvokeAsync(() =>
             {
-                var text = string.Join(Environment.NewLine,
-                    installResult.References.Distinct().OrderBy(c => c)
-                    .Select(r => Path.Combine(MainViewModel.NuGetPathVariableName, r))
-                    .Concat(installResult.FrameworkReferences.Distinct())
-                    .Where(r => !_viewModel.MainViewModel.RoslynHost.HasReference(_viewModel.DocumentId, r))
-                    .Select(r => "#r \"" + r + "\"")
-                    .Where(r => Editor.Text.IndexOf(r, StringComparison.OrdinalIgnoreCase) < 0));
-
-                if (text.Length > 0)
-                {
-                    Editor.Document.Insert(0, text + Environment.NewLine, AnchorMovementType.Default);
-                }
+                var text = $"#r \"nuget:{package.Id}/{package.Version}\"{Environment.NewLine}";
+                Editor.Document.Insert(0, text, AnchorMovementType.Default);
             });
         }
 

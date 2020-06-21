@@ -1,8 +1,6 @@
 ﻿using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
-using System.Collections.Generic;
 using System.Composition;
-using System.Linq;
 
 namespace RoslynPad.Roslyn.LanguageServices.ExtractInterface
 {
@@ -22,7 +20,9 @@ namespace RoslynPad.Roslyn.LanguageServices.ExtractInterface
         public string OK => "OK";
         public string Cancel => "Cancel";
 
+#pragma warning disable CS8618 // Non-nullable field is uninitialized.
         public ExtractInterfaceDialog()
+#pragma warning restore CS8618 // Non-nullable field is uninitialized.
         {
             //SetCommandBindings();
 

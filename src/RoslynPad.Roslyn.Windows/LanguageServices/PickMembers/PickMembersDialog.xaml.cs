@@ -19,7 +19,7 @@ namespace RoslynPad.Roslyn.LanguageServices.PickMembers
         /// For test purposes only. The integration tests need to know when the dialog is up and
         /// ready for automation.
         /// </summary>
-        internal static event Action TEST_DialogLoaded;
+        internal static event Action? TEST_DialogLoaded;
 
         // Expose localized strings for binding
         public string PickMembersDialogTitle => "Pick members";
@@ -30,7 +30,9 @@ namespace RoslynPad.Roslyn.LanguageServices.PickMembers
         public string Cancel => "Cancel";
         
         [ImportingConstructor]
+#pragma warning disable CS8618 // Non-nullable field is uninitialized.
         public PickMembersDialog()
+#pragma warning restore CS8618 // Non-nullable field is uninitialized.
         {
             SetCommandBindings();
 
@@ -151,7 +153,7 @@ namespace RoslynPad.Roslyn.LanguageServices.PickMembers
             get => DataContext;
             set
             {
-                _viewModel = value as PickMembersDialogViewModel;
+                _viewModel = (PickMembersDialogViewModel)value;
                 DataContext = value;
             }
         }

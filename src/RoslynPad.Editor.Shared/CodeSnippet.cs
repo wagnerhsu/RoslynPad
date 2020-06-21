@@ -66,9 +66,9 @@ namespace RoslynPad.Editor
         {
             if (snippetText == null) throw new ArgumentNullException(nameof(snippetText));
             var replaceableElements = new Dictionary<string, SnippetReplaceableTextElement>(StringComparer.OrdinalIgnoreCase);
-            foreach (Match m in _pattern.Matches(snippetText))
+            foreach (var match in _pattern.Matches(snippetText).OfType<Match>())
             {
-                var val = m.Groups[1].Value;
+                var val = match.Groups[1].Value;
                 var equalsSign = val.IndexOf('=');
                 if (equalsSign > 0)
                 {
@@ -78,14 +78,14 @@ namespace RoslynPad.Editor
             }
             var snippet = new Snippet();
             var pos = 0;
-            foreach (Match m in _pattern.Matches(snippetText))
+            foreach (var match in _pattern.Matches(snippetText).OfType<Match>())
             {
-                if (pos < m.Index)
+                if (pos < match.Index)
                 {
-                    snippet.Elements.Add(new SnippetTextElement { Text = snippetText.Substring(pos, m.Index - pos) });
+                    snippet.Elements.Add(new SnippetTextElement { Text = snippetText.Substring(pos, match.Index - pos) });
                 }
-                snippet.Elements.Add(CreateElementForValue(replaceableElements, m.Groups[1].Value, m.Index, snippetText));
-                pos = m.Index + m.Length;
+                snippet.Elements.Add(CreateElementForValue(replaceableElements, match.Groups[1].Value, match.Index, snippetText));
+                pos = match.Index + match.Length;
             }
             if (pos < snippetText.Length)
             {
@@ -105,7 +105,7 @@ namespace RoslynPad.Editor
 
         private static SnippetElement CreateElementForValue(Dictionary<string, SnippetReplaceableTextElement> replaceableElements, string val, int offset, string snippetText)
         {
-            SnippetReplaceableTextElement srte;
+            SnippetReplaceableTextElement? srte;
             var equalsSign = val.IndexOf('=');
             if (equalsSign > 0)
             {
@@ -145,7 +145,7 @@ namespace RoslynPad.Editor
             return new SnippetReplaceableTextElement { Text = val }; // ${unknown} -> replaceable element
         }
         
-        private static string GetValue(string propertyName)
+        private static string? GetValue(string propertyName)
         {
             if ("ClassName".Equals(propertyName, StringComparison.OrdinalIgnoreCase))
             {
@@ -159,7 +159,7 @@ namespace RoslynPad.Editor
             return null;
         }
 
-        private static SnippetElement GetDefaultElement(string tag, string snippetText, int position)
+        private static SnippetElement? GetDefaultElement(string tag, string snippetText, int position)
         {
             if ("Selection".Equals(tag, StringComparison.OrdinalIgnoreCase))
             {
@@ -184,13 +184,13 @@ namespace RoslynPad.Editor
             return snippetText.Substring(start, offset - start);
         }
 
-        private static string GetCurrentClass()
+        private static string? GetCurrentClass()
         {
             // TODO
             return null;
         }
 
-        private static Func<string, string> GetFunction(string name)
+        private static Func<string, string>? GetFunction(string name)
         {
             if ("toLower".Equals(name, StringComparison.OrdinalIgnoreCase))
                 return s => s.ToLower();
@@ -239,11 +239,11 @@ namespace RoslynPad.Editor
 
         private sealed class FunctionBoundElement : SnippetBoundElement
         {
-            internal Func<string, string> Function;
+            internal Func<string, string>? Function;
 
-            public override string ConvertText(string input)
+            public override string? ConvertText(string input)
             {
-                return Function(input);
+                return Function?.Invoke(input);
             }
         }
     }

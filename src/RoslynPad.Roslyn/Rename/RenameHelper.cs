@@ -12,7 +12,7 @@ namespace RoslynPad.Roslyn.Rename
 {
     public static class RenameHelper
     {
-        public static async Task<ISymbol> GetRenameSymbol(
+        public static async Task<ISymbol?> GetRenameSymbol(
             Document document, int position, CancellationToken cancellationToken = default)
         {
             var token = await document.GetTouchingWordAsync(position, cancellationToken).ConfigureAwait(false);
@@ -21,16 +21,21 @@ namespace RoslynPad.Roslyn.Rename
                     : null;
         }
 
-        public static async Task<ISymbol> GetRenameSymbol(
+        public static async Task<ISymbol?> GetRenameSymbol(
             Document document, SyntaxToken triggerToken, CancellationToken cancellationToken)
         {
-            var syntaxFactsService = document.Project.LanguageServices.GetService<ISyntaxFactsService>();
-            if (syntaxFactsService.IsKeyword(triggerToken))
+            var syntaxFactsService = document.Project.LanguageServices.GetRequiredService<ISyntaxFactsService>();
+            if (syntaxFactsService.IsReservedOrContextualKeyword(triggerToken))
             {
                 return null;
             }
 
             var semanticModel = await document.GetSemanticModelAsync(cancellationToken).ConfigureAwait(false);
+            if (semanticModel == null)
+            {
+                return null;
+            }
+
             var semanticFacts = document.GetLanguageService<ISemanticFactsService>();
 
             var tokenRenameInfo = RenameUtilities.GetTokenRenameInfo(semanticFacts, semanticModel, triggerToken, cancellationToken);
@@ -57,7 +62,7 @@ namespace RoslynPad.Roslyn.Rename
             // RenameOverloads option should be forced on.
             var forceRenameOverloads = tokenRenameInfo.IsMemberGroup;
 
-            if (syntaxFactsService.IsTypeNamedVarInVariableOrFieldDeclaration(triggerToken, triggerToken.Parent))
+            if (triggerToken.Parent != null && syntaxFactsService.IsTypeNamedVarInVariableOrFieldDeclaration(triggerToken, triggerToken.Parent))
             {
                 // To check if var in this context is a real type, or the keyword, we need to 
                 // speculatively bind the identifier "var". If it returns a symbol, it's a real type,
@@ -152,7 +157,7 @@ namespace RoslynPad.Roslyn.Rename
                     if (document.Project.IsSubmission)
                     {
                         var solution = document.Project.Solution;
-                        var projectIdOfLocation = solution.GetDocument(location.SourceTree).Project.Id;
+                        var projectIdOfLocation = solution.GetDocument(location.SourceTree)?.Project.Id;
 
                         if (solution.Projects.Any(p => p.IsSubmission && p.ProjectReferences.Any(r => r.ProjectId == projectIdOfLocation)))
                         {

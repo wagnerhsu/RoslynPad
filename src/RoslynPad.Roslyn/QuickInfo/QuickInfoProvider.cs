@@ -28,12 +28,17 @@ namespace RoslynPad.Roslyn.QuickInfo
             _contentProvider = contentProvider;
         }
 
-        public async Task<QuickInfoItem> GetItemAsync(
+        public async Task<QuickInfoItem?> GetItemAsync(
             Document document,
             int position,
             CancellationToken cancellationToken)
         {
             var tree = await document.GetSyntaxTreeAsync(cancellationToken).ConfigureAwait(false);
+            if (tree == null)
+            {
+                return null;
+            }
+
             var token = await tree.GetTouchingTokenAsync(position, cancellationToken, findInsideTrivia: true).ConfigureAwait(false);
 
             var state = await GetQuickInfoItemAsync(document, token, position, cancellationToken).ConfigureAwait(false);
@@ -60,7 +65,7 @@ namespace RoslynPad.Roslyn.QuickInfo
             return !token.Parent.IsKind(SyntaxKind.XmlCrefAttribute);
         }
 
-        private async Task<QuickInfoItem> GetQuickInfoItemAsync(
+        private async Task<QuickInfoItem?> GetQuickInfoItemAsync(
             Document document,
             SyntaxToken token,
             int position,
@@ -79,7 +84,7 @@ namespace RoslynPad.Roslyn.QuickInfo
             return null;
         }
 
-        private async Task<IDeferredQuickInfoContent> BuildContentAsync(
+        private async Task<IDeferredQuickInfoContent?> BuildContentAsync(
             Document document,
             SyntaxToken token,
             CancellationToken cancellationToken)
@@ -97,7 +102,7 @@ namespace RoslynPad.Roslyn.QuickInfo
                 return await CreateContentAsync(document.Project.Solution.Workspace,
                     token,
                     modelAndSymbols.Item1,
-                    modelAndSymbols.Item2,
+                    modelAndSymbols.Item2!,
                     supportedPlatforms: null,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
             }
@@ -117,19 +122,19 @@ namespace RoslynPad.Roslyn.QuickInfo
 
             var candidateResults = new List<Tuple<DocumentId, SemanticModel, IList<ISymbol>>>
             {
-                Tuple.Create(document.Id, modelAndSymbols.Item1, modelAndSymbols.Item2)
+                Tuple.Create(document.Id, modelAndSymbols.Item1, modelAndSymbols.Item2!)
             };
 
             foreach (var link in linkedDocumentIds)
             {
                 var linkedDocument = document.Project.Solution.GetDocument(link);
-                var linkedToken = await FindTokenInLinkedDocument(token, linkedDocument, cancellationToken).ConfigureAwait(false);
+                var linkedToken = await FindTokenInLinkedDocument(token, linkedDocument!, cancellationToken).ConfigureAwait(false);
 
                 if (linkedToken != default)
                 {
                     // Not in an inactive region, so this file is a candidate.
                     candidateProjects.Add(link.ProjectId);
-                    var linkedModelAndSymbols = await BindTokenAsync(linkedDocument, linkedToken, cancellationToken).ConfigureAwait(false);
+                    var linkedModelAndSymbols = await BindTokenAsync(linkedDocument!, linkedToken, cancellationToken).ConfigureAwait(false);
                     candidateResults.Add(Tuple.Create(link, linkedModelAndSymbols.Item1, linkedModelAndSymbols.Item2));
                 }
             }
@@ -173,7 +178,7 @@ namespace RoslynPad.Roslyn.QuickInfo
             var root = await linkedDocument.GetSyntaxRootAsync(cancellationToken).ConfigureAwait(false);
 
             // Don't search trivia because we want to ignore inactive regions
-            var linkedToken = root.FindToken(token.SpanStart);
+            var linkedToken = root!.FindToken(token.SpanStart);
 
             // The new and old tokens should have the same span?
             if (token.Span == linkedToken.Span)
@@ -189,10 +194,10 @@ namespace RoslynPad.Roslyn.QuickInfo
             SyntaxToken token,
             SemanticModel semanticModel,
             IEnumerable<ISymbol> symbols,
-            SupportedPlatformData supportedPlatforms,
+            SupportedPlatformData? supportedPlatforms,
             CancellationToken cancellationToken)
         {
-            var descriptionService = workspace.Services.GetLanguageServices(token.Language).GetService<ISymbolDisplayService>();
+            var descriptionService = workspace.Services.GetLanguageServices(token.Language).GetRequiredService<ISymbolDisplayService>();
 
             var sections = await descriptionService.ToDescriptionGroupsAsync(workspace, semanticModel, token.SpanStart, symbols.AsImmutable(), cancellationToken).ConfigureAwait(false);
 
@@ -249,13 +254,13 @@ namespace RoslynPad.Roslyn.QuickInfo
                 }
             }
 
-            var formatter = workspace.Services.GetLanguageServices(semanticModel.Language).GetService<IDocumentationCommentFormattingService>();
-            var syntaxFactsService = workspace.Services.GetLanguageServices(semanticModel.Language).GetService<ISyntaxFactsService>();
+            var formatter = workspace.Services.GetLanguageServices(semanticModel.Language).GetRequiredService<IDocumentationCommentFormattingService>();
+            var syntaxFactsService = workspace.Services.GetLanguageServices(semanticModel.Language).GetRequiredService<ISyntaxFactsService>();
             var documentationContent = GetDocumentationContent(symbols, sections, semanticModel, token, formatter, syntaxFactsService, cancellationToken);
             var showWarningGlyph = supportedPlatforms != null && supportedPlatforms.HasValidAndInvalidProjects();
             var showSymbolGlyph = true;
 
-            if (workspace.Services.GetLanguageServices(semanticModel.Language).GetService<ISyntaxFactsService>().IsAwaitKeyword(token) &&
+            if (workspace.Services.GetLanguageServices(semanticModel.Language).GetRequiredService<ISyntaxFactsService>().IsAwaitKeyword(token) &&
                 (symbols.First() as INamedTypeSymbol)?.SpecialType == SpecialType.System_Void)
             {
                 documentationContent = _contentProvider.CreateDocumentationCommentDeferredContent(null);
@@ -325,7 +330,7 @@ namespace RoslynPad.Roslyn.QuickInfo
             var overloads = semanticModel.GetMemberGroup(bindableParent, cancellationToken);
 
             symbols = symbols.Where(IsOk)
-                .Where(s => IsAccessible(s, enclosingType))
+                .Where(s => IsAccessible(s, enclosingType!))
                 .Concat(overloads)
                 .Distinct(SymbolEquivalenceComparer.Instance)
                 .ToImmutableArray();
@@ -342,13 +347,13 @@ namespace RoslynPad.Roslyn.QuickInfo
 
             // Couldn't bind the token to specific symbols.  If it's an operator, see if we can at
             // least bind it to a type.
-            var syntaxFacts = document.Project.LanguageServices.GetService<ISyntaxFactsService>();
-            if (syntaxFacts.IsOperator(token))
+            var syntaxFacts = document.Project.LanguageServices.GetRequiredService<ISyntaxFactsService>();
+            if (syntaxFacts.IsOperator(token) && token.Parent != null)
             {
                 var typeInfo = semanticModel.GetTypeInfo(token.Parent, cancellationToken);
-                if (IsOk(typeInfo.Type))
+                if (IsOk(typeInfo.Type!))
                 {
-                    return new ValueTuple<SemanticModel, IList<ISymbol>>(semanticModel, new List<ISymbol>(1) { typeInfo.Type });
+                    return new ValueTuple<SemanticModel, IList<ISymbol>>(semanticModel, new List<ISymbol>(1) { typeInfo.Type! });
                 }
             }
 
@@ -468,7 +473,7 @@ namespace RoslynPad.Roslyn.QuickInfo
             IList<TaggedText> usageText,
             IList<TaggedText> exceptionText);
 
-        IDeferredQuickInfoContent CreateDocumentationCommentDeferredContent(string documentationComment);
+        IDeferredQuickInfoContent CreateDocumentationCommentDeferredContent(string? documentationComment);
 
         IDeferredQuickInfoContent CreateClassifiableDeferredContent(IList<TaggedText> content);
     }

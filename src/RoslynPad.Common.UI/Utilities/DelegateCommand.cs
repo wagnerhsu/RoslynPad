@@ -19,17 +19,17 @@ namespace RoslynPad.Utilities
 
     internal class DelegateCommand : IDelegateCommand
     {
-        private readonly Action _action;
-        private readonly Func<bool> _canExecute;
-        private readonly Func<Task> _asyncAction;
+        private readonly Action? _action;
+        private readonly Func<bool>? _canExecute;
+        private readonly Func<Task>? _asyncAction;
 
-        public DelegateCommand(Action action, Func<bool> canExecute = null)
+        public DelegateCommand(Action action, Func<bool>? canExecute = null)
         {
             _action = action;
             _canExecute = canExecute;
         }
 
-        public DelegateCommand(Func<Task> asyncAction, Func<bool> canExecute = null)
+        public DelegateCommand(Func<Task> asyncAction, Func<bool>? canExecute = null)
         {
             _asyncAction = asyncAction;
             _canExecute = canExecute;
@@ -45,24 +45,19 @@ namespace RoslynPad.Utilities
         {
             if (_asyncAction != null)
             {
-                ExecuteAsync();
+                var task = _asyncAction();
             }
             else
             {
-                _action();
+                _action?.Invoke();
             }
-        }
-
-        private async void ExecuteAsync()
-        {
-            await _asyncAction().ConfigureAwait(true);
         }
 
         bool ICommand.CanExecute(object parameter) => CanExecute();
 
         void ICommand.Execute(object parameter) => Execute();
 
-        public event EventHandler CanExecuteChanged;
+        public event EventHandler? CanExecuteChanged;
 
         public void RaiseCanExecuteChanged()
         {
@@ -72,17 +67,17 @@ namespace RoslynPad.Utilities
 
     internal class DelegateCommand<T> : IDelegateCommand<T>
     {
-        private readonly Action<T> _action;
-        private readonly Func<T, bool> _canExecute;
-        private readonly Func<T, Task> _asyncAction;
+        private readonly Action<T>? _action;
+        private readonly Func<T, bool>? _canExecute;
+        private readonly Func<T, Task>? _asyncAction;
 
-        public DelegateCommand(Action<T> action, Func<T, bool> canExecute = null)
+        public DelegateCommand(Action<T> action, Func<T, bool>? canExecute = null)
         {
             _action = action;
             _canExecute = canExecute;
         }
 
-        public DelegateCommand(Func<T, Task> asyncAction, Func<T, bool> canExecute = null)
+        public DelegateCommand(Func<T, Task> asyncAction, Func<T, bool>? canExecute = null)
         {
             _asyncAction = asyncAction;
             _canExecute = canExecute;
@@ -97,38 +92,35 @@ namespace RoslynPad.Utilities
         {
             if (_asyncAction != null)
             {
-                ExecuteAsync(parameter);
+                var task = _asyncAction(parameter);
             }
             else
             {
-                _action(parameter);
+                _action?.Invoke(parameter);
             }
-        }
-
-        private async void ExecuteAsync(T parameter)
-        {
-            await _asyncAction(parameter).ConfigureAwait(true);
         }
 
         bool ICommand.CanExecute(object parameter) => CanExecute((T)parameter);
 
         void ICommand.Execute(object parameter) => Execute((T)parameter);
 
-        public event EventHandler CanExecuteChanged;
+        public event EventHandler? CanExecuteChanged;
 
         public void RaiseCanExecuteChanged()
         {
             CanExecuteChanged?.Invoke(this, EventArgs.Empty);
         }
 
+#pragma warning disable CS8625 // Cannot convert null literal to non-nullable reference or unconstrained type parameter.
         void IDelegateCommand.Execute()
         {
-            Execute(default);
+            Execute(default!);
         }
 
         bool IDelegateCommand.CanExecute()
         {
-            return CanExecute(default);
+            return CanExecute(default!);
         }
+#pragma warning restore CS8625 // Cannot convert null literal to non-nullable reference or unconstrained type parameter.
     }
 }

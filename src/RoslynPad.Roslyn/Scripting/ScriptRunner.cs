@@ -22,25 +22,30 @@ namespace RoslynPad.Roslyn.Scripting
     {
         private static readonly string _globalAssemblyNamePrefix = "\u211B\u2118-" + Guid.NewGuid() + "-";
         private static int _assemblyNumber;
-        
+
         private readonly InteractiveAssemblyLoader _assemblyLoader;
-        private Func<object[], Task<object>> _lazyExecutor;
-        private Compilation _lazyCompilation;
         private readonly OptimizationLevel _optimizationLevel;
         private readonly bool _checkOverflow;
         private readonly bool _allowUnsafe;
+        private readonly bool _registerDependencies;
 
-        public ScriptRunner(string code, CSharpParseOptions parseOptions = null, OutputKind outputKind = OutputKind.DynamicallyLinkedLibrary,
-            Platform platform = Platform.AnyCpu, IEnumerable<MetadataReference> references = null,
-            IEnumerable<string> usings = null, string filePath = null, string workingDirectory = null, 
-            MetadataReferenceResolver metadataResolver = null, SourceReferenceResolver sourceResolver = null,
-            InteractiveAssemblyLoader assemblyLoader = null, 
-            OptimizationLevel optimizationLevel = OptimizationLevel.Debug, bool checkOverflow = false, bool allowUnsafe = true)
+        private Func<object[], Task<object>>? _lazyExecutor;
+        private Compilation? _lazyCompilation;
+
+        public ScriptRunner(string? code, ImmutableList<SyntaxTree>? syntaxTrees = null, CSharpParseOptions? parseOptions = null, OutputKind outputKind = OutputKind.DynamicallyLinkedLibrary,
+            Platform platform = Platform.AnyCpu, IEnumerable<MetadataReference>? references = null,
+            IEnumerable<string>? usings = null, string? filePath = null, string? workingDirectory = null,
+            MetadataReferenceResolver? metadataResolver = null, SourceReferenceResolver? sourceResolver = null,
+            InteractiveAssemblyLoader? assemblyLoader = null,
+            OptimizationLevel optimizationLevel = OptimizationLevel.Debug, bool checkOverflow = false, bool allowUnsafe = true,
+            bool registerDependencies = false)
         {
             _optimizationLevel = optimizationLevel;
             _checkOverflow = checkOverflow;
             _allowUnsafe = allowUnsafe;
+            _registerDependencies = registerDependencies;
             Code = code;
+            SyntaxTrees = syntaxTrees;
             OutputKind = outputKind;
             Platform = platform;
             _assemblyLoader = assemblyLoader ?? new InteractiveAssemblyLoader();
@@ -57,8 +62,8 @@ namespace RoslynPad.Roslyn.Scripting
                                  : SourceFileResolver.Default);
         }
 
-        public string Code { get; }
-
+        public string? Code { get; }
+        public ImmutableList<SyntaxTree>? SyntaxTrees { get; }
         public OutputKind OutputKind { get; }
         public Platform Platform { get; }
 
@@ -74,13 +79,13 @@ namespace RoslynPad.Roslyn.Scripting
 
         public CSharpParseOptions ParseOptions { get; }
 
-        public ImmutableArray<Diagnostic> Compile(Action<Stream> peStreamAction, CancellationToken cancellationToken = default)
+        public ImmutableArray<Diagnostic> Compile(Action<Stream>? peStreamAction, CancellationToken cancellationToken = default)
         {
             try
             {
                 GetExecutor(peStreamAction, cancellationToken);
 
-                return ImmutableArray.CreateRange(GetCompilation().GetDiagnostics(cancellationToken).Where(d => d.Severity == DiagnosticSeverity.Warning));
+                return ImmutableArray.CreateRange(GetCompilation(GetScriptAssemblyName()).GetDiagnostics(cancellationToken).Where(d => d.Severity == DiagnosticSeverity.Warning));
             }
             catch (CompilationErrorException e)
             {
@@ -88,7 +93,7 @@ namespace RoslynPad.Roslyn.Scripting
             }
         }
 
-        public async Task<object> RunAsync(CancellationToken cancellationToken = default)
+        public async Task<object?> RunAsync(CancellationToken cancellationToken = default)
         {
             var entryPoint = GetExecutor(null, cancellationToken);
             if (entryPoint == null)
@@ -103,7 +108,7 @@ namespace RoslynPad.Roslyn.Scripting
 
         public async Task<ImmutableArray<Diagnostic>> SaveAssembly(string assemblyPath, CancellationToken cancellationToken = default)
         {
-            var compilation = GetCompilation().WithAssemblyName(Path.GetFileNameWithoutExtension(assemblyPath));
+            var compilation = GetCompilation(Path.GetFileNameWithoutExtension(assemblyPath));
 
             var diagnostics = compilation.GetParseDiagnostics(cancellationToken);
             if (!diagnostics.IsEmpty)
@@ -113,10 +118,10 @@ namespace RoslynPad.Roslyn.Scripting
 
             var diagnosticsBag = new DiagnosticBag();
             await SaveAssembly(assemblyPath, compilation, diagnosticsBag, cancellationToken).ConfigureAwait(false);
-            return GetDiagnostics(diagnosticsBag);
+            return GetDiagnostics(diagnosticsBag, includeWarnings: true);
         }
 
-        private Func<object[], Task<object>> GetExecutor(Action<Stream> peStreamAction, CancellationToken cancellationToken)
+        private Func<object[], Task<object>>? GetExecutor(Action<Stream>? peStreamAction, CancellationToken cancellationToken)
         {
             if (_lazyExecutor == null)
             {
@@ -126,9 +131,11 @@ namespace RoslynPad.Roslyn.Scripting
             return _lazyExecutor;
         }
 
-        private Func<object[], Task<object>> CreateExecutor(Action<Stream> peStreamAction, CancellationToken cancellationToken)
+        private static string GetScriptAssemblyName() => _globalAssemblyNamePrefix + Interlocked.Increment(ref _assemblyNumber);
+
+        private Func<object[], Task<object>>? CreateExecutor(Action<Stream>? peStreamAction, CancellationToken cancellationToken)
         {
-            var compilation = GetCompilation();
+            var compilation = GetCompilation(GetScriptAssemblyName());
 
             var diagnosticFormatter = CSharpDiagnosticFormatter.Instance;
             var diagnostics = DiagnoseCompilation(compilation, diagnosticFormatter);
@@ -178,9 +185,13 @@ namespace RoslynPad.Roslyn.Scripting
             }
         }
 
-        private Func<object[], Task<object>> Build(Action<Stream> peStreamAction, Compilation compilation, DiagnosticBag diagnostics, CancellationToken cancellationToken)
+        private Func<object[], Task<object>>? Build(Action<Stream>? peStreamAction, Compilation compilation, DiagnosticBag diagnostics, CancellationToken cancellationToken)
         {
             var entryPoint = compilation.GetEntryPoint(cancellationToken);
+            if (entryPoint == null)
+            {
+                return null;
+            }
 
             using (var peStream = new MemoryStream())
             using (var pdbStream = new MemoryStream())
@@ -196,16 +207,19 @@ namespace RoslynPad.Roslyn.Scripting
                 {
                     return null;
                 }
-                
-                foreach (var referencedAssembly in compilation.References.Select(
-                    x => new { Key = x, Value = compilation.GetAssemblyOrModuleSymbol(x) as IAssemblySymbol }))
-                {
-                    if (referencedAssembly.Value == null) continue;
-                    
-                    var path = (referencedAssembly.Key as PortableExecutableReference)?.FilePath;
-                    if (path == null) continue;
 
-                    _assemblyLoader.RegisterDependency(referencedAssembly.Value.Identity, path);
+                if (_registerDependencies)
+                {
+                    foreach (var referencedAssembly in compilation.References.Select(
+                        x => new { Key = x, Value = compilation.GetAssemblyOrModuleSymbol(x) as IAssemblySymbol }))
+                    {
+                        if (referencedAssembly.Value == null) continue;
+
+                        var path = (referencedAssembly.Key as PortableExecutableReference)?.FilePath;
+                        if (path == null) continue;
+
+                        _assemblyLoader.RegisterDependency(referencedAssembly.Value.Identity, path);
+                    }
                 }
 
                 peStream.Position = 0;
@@ -229,8 +243,8 @@ namespace RoslynPad.Roslyn.Scripting
             var entryPointTypeName = BuildQualifiedName(entryPoint.ContainingNamespace.MetadataName, entryPoint.ContainingType.MetadataName);
             var entryPointMethodName = entryPoint.MetadataName;
 
-            var entryPointType = assembly.GetType(entryPointTypeName, throwOnError: true, ignoreCase: false).GetTypeInfo();
-            return entryPointType.GetDeclaredMethod(entryPointMethodName);
+            var entryPointType = assembly.GetType(entryPointTypeName, throwOnError: true, ignoreCase: false);
+            return entryPointType.GetTypeInfo().GetDeclaredMethod(entryPointMethodName);
         }
 
         private static string BuildQualifiedName(
@@ -243,20 +257,26 @@ namespace RoslynPad.Roslyn.Scripting
         // TODO:
         //public bool HasSubmissionResult => GetCompilation().HasSubmissionResult;
 
-        private Compilation GetCompilation()
+        private Compilation GetCompilation(string assemblyName)
         {
             if (_lazyCompilation == null)
             {
-                var compilation = GetCompilationFromCode(Code);
+                var compilation = GetCompilationFromCode(assemblyName);
                 Interlocked.CompareExchange(ref _lazyCompilation, compilation, null);
             }
 
+#pragma warning disable CS8603 // Possible null reference return.
             return _lazyCompilation;
+#pragma warning restore CS8603 // Possible null reference return.
         }
 
-        private Compilation GetCompilationFromCode(string code)
+        private Compilation GetCompilationFromCode(string assemblyName)
         {
-            var tree = SyntaxFactory.ParseSyntaxTree(code, ParseOptions, FilePath);
+            var trees = SyntaxTrees;
+            if (trees == null)
+            {
+                trees = ImmutableList.Create(SyntaxFactory.ParseSyntaxTree(Code, ParseOptions, FilePath));
+            }
 
             var references = GetReferences();
 
@@ -270,30 +290,20 @@ namespace RoslynPad.Roslyn.Scripting
                 allowUnsafe: _allowUnsafe,
                 platform: Platform,
                 warningLevel: 4,
+                deterministic: true,
                 xmlReferenceResolver: null,
                 sourceReferenceResolver: SourceResolver,
                 metadataReferenceResolver: MetadataResolver,
-                assemblyIdentityComparer: DesktopAssemblyIdentityComparer.Default
+                assemblyIdentityComparer: AssemblyIdentityComparer.Default,
+                nullableContextOptions: NullableContextOptions.Enable
             );
             //.WithTopLevelBinderFlags(BinderFlags.IgnoreCorLibraryDuplicatedTypes),
 
-            var assemblyNumber = Interlocked.Increment(ref _assemblyNumber);
-
-            if (OutputKind == OutputKind.ConsoleApplication || OutputKind == OutputKind.WindowsApplication)
-            {
-                return CSharpCompilation.Create(
-                 _globalAssemblyNamePrefix + assemblyNumber,
-                 new[] { tree },
+            return CSharpCompilation.Create(
+                 assemblyName,
+                 trees,
                  references,
                  compilationOptions);
-            }
-
-            return CSharpCompilation.CreateScriptCompilation(
-                    _globalAssemblyNamePrefix + assemblyNumber,
-                    tree,
-                    references,
-                    compilationOptions,
-                    returnType: typeof(object));
         }
 
         private IEnumerable<MetadataReference> GetReferences()
@@ -319,7 +329,7 @@ namespace RoslynPad.Roslyn.Scripting
 
         private static void ThrowIfAnyCompilationErrors(DiagnosticBag diagnostics, DiagnosticFormatter formatter)
         {
-            var filtered = GetDiagnostics(diagnostics);
+            var filtered = GetDiagnostics(diagnostics, includeWarnings: false);
             if (!filtered.IsEmpty)
             {
                 throw new CompilationErrorException(
@@ -328,18 +338,20 @@ namespace RoslynPad.Roslyn.Scripting
             }
         }
 
-        private static ImmutableArray<Diagnostic> GetDiagnostics(DiagnosticBag diagnostics)
+        private static ImmutableArray<Diagnostic> GetDiagnostics(DiagnosticBag diagnostics, bool includeWarnings)
         {
             if (diagnostics.IsEmptyWithoutResolution)
             {
                 return ImmutableArray<Diagnostic>.Empty;
             }
-            return diagnostics.AsEnumerable().Where(d => d.Severity == DiagnosticSeverity.Error).AsImmutable();
+
+            return diagnostics.AsEnumerable().Where(d =>
+                d.Severity == DiagnosticSeverity.Error || (includeWarnings && d.Severity == DiagnosticSeverity.Warning)).AsImmutable();
         }
 
         private class DiagnosticBag
         {
-            private ConcurrentQueue<Diagnostic> _lazyBag;
+            private ConcurrentQueue<Diagnostic>? _lazyBag;
 
             public bool IsEmptyWithoutResolution
             {

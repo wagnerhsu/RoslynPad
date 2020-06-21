@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Composition;
 using System.Threading.Tasks;
 using System.Windows;
@@ -40,14 +39,14 @@ namespace RoslynPad
             set => _dialog.FileName = value;
         }
 
-        public Task<string[]> ShowAsync()
+        public Task<string[]?> ShowAsync()
         {
             if (_dialog.ShowDialog(Application.Current.MainWindow) == true)
             {
-                return Task.FromResult(_dialog.FileNames);
+                return Task.FromResult<string[]?>(_dialog.FileNames);
             }
 
-            return Task.FromResult<string[]>(null);
+            return Task.FromResult<string[]?>(null);
         }
     }
 }

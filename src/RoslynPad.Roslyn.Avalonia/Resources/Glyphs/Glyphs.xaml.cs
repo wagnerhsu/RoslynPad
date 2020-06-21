@@ -3,7 +3,7 @@ using Avalonia.Markup.Xaml;
 
 namespace RoslynPad.Roslyn.Resources
 {
-    internal class Glyphs : ResourceDictionary
+    public class Glyphs : ResourceDictionary
     {
         public Glyphs()
         {

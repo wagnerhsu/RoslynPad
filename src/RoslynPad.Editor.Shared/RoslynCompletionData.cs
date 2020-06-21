@@ -34,7 +34,7 @@ namespace RoslynPad.Editor
         private readonly SnippetManager _snippetManager;
         private readonly Glyph _glyph;
         private readonly Lazy<Task> _descriptionTask;
-        private Decorator _description;
+        private Decorator? _description;
 
         public RoslynCompletionData(Document document, CompletionItem item, char? completionChar, SnippetManager snippetManager)
         {
@@ -42,15 +42,10 @@ namespace RoslynPad.Editor
             _item = item;
             _completionChar = completionChar;
             _snippetManager = snippetManager;
-            Text = item.DisplayText;
-            Content = item.DisplayText;
+            Text = item.DisplayTextPrefix + item.DisplayText + item.DisplayTextSuffix;
+            Content = Text;
             _glyph = item.GetGlyph();
             _descriptionTask = new Lazy<Task>(RetrieveDescription);
-#if AVALONIA
-            Drawing = _glyph.ToImageSource();
-#else
-            Image = _glyph.ToImageSource();
-#endif
         }
 
         public async void Complete(TextArea textArea, ISegment completionSegment, EventArgs e)
@@ -61,7 +56,7 @@ namespace RoslynPad.Editor
             }
 
             var changes = await CompletionService.GetService(_document)
-                .GetChangeAsync(_document, _item, _completionChar).ConfigureAwait(true);
+                .GetChangeAsync(_document, _item, null).ConfigureAwait(true);
 
             var textChange = changes.TextChange;
             var document = textArea.Document;
@@ -90,35 +85,39 @@ namespace RoslynPad.Editor
         {
             char? completionChar = null;
             var txea = e as CommonTextEventArgs;
-            var kea = e as KeyEventArgs;
             if (txea != null && txea.Text.Length > 0)
                 completionChar = txea.Text[0];
-            else if (kea != null && kea.Key == Key.Tab)
+            else if (e is KeyEventArgs kea && kea.Key == Key.Tab)
                 completionChar = '\t';
 
             if (completionChar == '\t')
             {
                 var snippet = _snippetManager.FindSnippet(_item.DisplayText);
-                Debug.Assert(snippet != null, "snippet != null");
-                var editorSnippet = snippet.CreateAvalonEditSnippet();
-                using (textArea.Document.RunUpdate())
+                if (snippet != null)
                 {
-                    textArea.Document.Remove(completionSegment.Offset, completionSegment.Length);
-                    editorSnippet.Insert(textArea);
+                    var editorSnippet = snippet.CreateAvalonEditSnippet();
+                    using (textArea.Document.RunUpdate())
+                    {
+                        textArea.Document.Remove(completionSegment.Offset, completionSegment.Length);
+                        editorSnippet.Insert(textArea);
+                    }
+                    if (txea != null)
+                    {
+                        txea.Handled = true;
+                    }
+
+                    return true;
                 }
-                if (txea != null)
-                {
-                    txea.Handled = true;
-                }
-                return true;
             }
+
             return false;
         }
 
-        public CommonImage Image { get; }
-
 #if AVALONIA
-        public Drawing Drawing { get; set; }
+        public CommonImage? Image => null;
+        public Drawing? Drawing => _glyph.ToImageSource();
+#else
+        public CommonImage? Image => _glyph.ToImageSource();
 #endif
 
         public string Text { get; }
@@ -145,8 +144,11 @@ namespace RoslynPad.Editor
 
         private async Task RetrieveDescription()
         {
-            var description = await Task.Run(() => CompletionService.GetService(_document).GetDescriptionAsync(_document, _item)).ConfigureAwait(true);
-            _description.Child = description.TaggedParts.ToTextBlock();
+            if (_description != null)
+            {
+                var description = await Task.Run(() => CompletionService.GetService(_document).GetDescriptionAsync(_document, _item)).ConfigureAwait(true);
+                _description.Child = description.TaggedParts.ToTextBlock();
+            }
         }
 
         // ReSharper disable once UnusedAutoPropertyAccessor.Local
@@ -156,9 +158,9 @@ namespace RoslynPad.Editor
 
         public string SortText => _item.SortText;
 
-        public event PropertyChangedEventHandler PropertyChanged;
+        public event PropertyChangedEventHandler? PropertyChanged;
 
-        private void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }

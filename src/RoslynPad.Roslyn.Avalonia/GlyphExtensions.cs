@@ -1,4 +1,3 @@
-using System.IO;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using RoslynPad.Roslyn.Completion;
@@ -11,7 +10,7 @@ namespace RoslynPad.Roslyn
     {
         private static readonly GlyphService _service = new GlyphService();
 
-        public static Drawing ToImageSource(this Glyph glyph)
+        public static Drawing? ToImageSource(this Glyph glyph)
         {
             var image = _service.GetGlyphImage(glyph);
             return image;
@@ -19,17 +18,17 @@ namespace RoslynPad.Roslyn
 
         private class GlyphService
         {
-            private readonly ResourceDictionary _glyphs;
+            private readonly Glyphs _glyphs = new Glyphs();
 
-            public GlyphService()
+            public Drawing? GetGlyphImage(Glyph glyph)
             {
-                using (var stream = typeof(Glyphs).Assembly.GetManifestResourceStream(typeof(Glyphs), $"{nameof(Glyphs)}.{nameof(Glyphs)}.xaml"))
+                if (_glyphs != null && _glyphs.TryGetValue(glyph.ToString(), out var glyphImage))
                 {
-                    _glyphs = (ResourceDictionary)new AvaloniaXamlLoader().Load(stream);
+                    return glyphImage as Drawing;
                 }
-            }
 
-            public Drawing GetGlyphImage(Glyph glyph) => _glyphs?[glyph] as Drawing;
+                return null;
+            }
         }
     }
 }

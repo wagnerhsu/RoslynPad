@@ -6,14 +6,13 @@ using RoslynPad.Roslyn.QuickInfo;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using RoslynPad.Roslyn.AutomaticCompletion;
 #if AVALONIA
 using Avalonia;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Input;
 using ImageSource = Avalonia.Media.Drawing;
-using ModifierKeys = Avalonia.Input.InputModifiers;
+using ModifierKeys = Avalonia.Input.KeyModifiers;
 using TextCompositionEventArgs = Avalonia.Input.TextInputEventArgs;
 using RoutingStrategy = Avalonia.Interactivity.RoutingStrategies;
 #else
@@ -27,15 +26,15 @@ namespace RoslynPad.Editor
     public class RoslynCodeEditor : CodeTextEditor
     {
         private readonly TextMarkerService _textMarkerService;
-        private BraceMatcherHighlightRenderer _braceMatcherHighlighter;
-        private ContextActionsRenderer _contextActionsRenderer = null;
-        private IClassificationHighlightColors _classificationHighlightColors;
-        private IRoslynHost _roslynHost;
-        private DocumentId _documentId;
-        private IQuickInfoProvider _quickInfoProvider;
-        private IBraceMatchingService _braceMatchingService;
-        private IBraceCompletionProvider _braceCompletionProvider;
-        private CancellationTokenSource _braceMatchingCts;
+        private BraceMatcherHighlightRenderer? _braceMatcherHighlighter;
+        private ContextActionsRenderer? _contextActionsRenderer;
+        private IClassificationHighlightColors? _classificationHighlightColors;
+        private IRoslynHost? _roslynHost;
+        private DocumentId? _documentId;
+        private IQuickInfoProvider? _quickInfoProvider;
+        private IBraceMatchingService? _braceMatchingService;
+        private CancellationTokenSource? _braceMatchingCts;
+        private RoslynHighlightingColorizer? _colorizer;
 
         public RoslynCodeEditor()
         {
@@ -43,8 +42,16 @@ namespace RoslynPad.Editor
             TextArea.TextView.BackgroundRenderers.Add(_textMarkerService);
             TextArea.TextView.LineTransformers.Add(_textMarkerService);
             TextArea.Caret.PositionChanged += CaretOnPositionChanged;
-            TextArea.TextEntered += OnTextEntered;
         }
+
+        public bool IsBraceCompletionEnabled
+        {
+            get { return this.GetValue(IsBraceCompletionEnabledProperty); }
+            set { this.SetValue(IsBraceCompletionEnabledProperty, value); }
+        }
+
+        public static readonly StyledProperty<bool> IsBraceCompletionEnabledProperty =
+            CommonProperty.Register<RoslynCodeEditor, bool>(nameof(IsBraceCompletionEnabled), defaultValue: true);
 
         public static readonly StyledProperty<ImageSource> ContextActionsIconProperty = CommonProperty.Register<RoslynCodeEditor, ImageSource>(
             nameof(ContextActionsIcon), onChanged: OnContextActionsIconChanged);
@@ -76,14 +83,6 @@ namespace RoslynPad.Editor
             RaiseEvent(e);
         }
 
-        private void OnTextEntered(object sender, TextCompositionEventArgs e)
-        {
-            if (e.Text.Length == 1)
-            {
-                _braceCompletionProvider.TryComplete(_roslynHost.GetDocument(_documentId), CaretOffset);
-            }
-        }
-
         public DocumentId Initialize(IRoslynHost roslynHost, IClassificationHighlightColors highlightColors, string workingDirectory, string documentText)
         {
             _roslynHost = roslynHost ?? throw new ArgumentNullException(nameof(roslynHost));
@@ -93,7 +92,6 @@ namespace RoslynPad.Editor
 
             _quickInfoProvider = _roslynHost.GetService<IQuickInfoProvider>();
             _braceMatchingService = _roslynHost.GetService<IBraceMatchingService>();
-            _braceCompletionProvider = _roslynHost.GetService<IBraceCompletionProvider>();
 
             var avalonEditTextContainer = new AvalonEditTextContainer(Document) { Editor = this };
 
@@ -101,17 +99,17 @@ namespace RoslynPad.Editor
             OnCreatingDocument(creatingDocumentArgs);
 
             _documentId = creatingDocumentArgs.DocumentId ??
-                roslynHost.AddDocument(new DocumentCreationArgs(avalonEditTextContainer, workingDirectory, 
+                roslynHost.AddDocument(new DocumentCreationArgs(avalonEditTextContainer, workingDirectory,
                     args => ProcessDiagnostics(args), text => avalonEditTextContainer.UpdateText(text)));
 
             AppendText(documentText);
             Document.UndoStack.ClearAll();
             AsyncToolTipRequest = OnAsyncToolTipRequest;
 
-            TextArea.TextView.LineTransformers.Insert(0, new RoslynHighlightingColorizer(_documentId, _roslynHost, _classificationHighlightColors));
+            RefreshHighlighting();
 
-            //_contextActionsRenderer = new ContextActionsRenderer(this, _textMarkerService) { IconImage = ContextActionsIcon };
-            //_contextActionsRenderer.Providers.Add(new RoslynContextActionProvider(_documentId, _roslynHost));
+            _contextActionsRenderer = new ContextActionsRenderer(this, _textMarkerService) { IconImage = ContextActionsIcon };
+            _contextActionsRenderer.Providers.Add(new RoslynContextActionProvider(_documentId, _roslynHost));
 
             var completionProvider = new RoslynCodeEditorCompletionProvider(_documentId, _roslynHost);
             completionProvider.Warmup();
@@ -121,8 +119,27 @@ namespace RoslynPad.Editor
             return _documentId;
         }
 
-        private async void CaretOnPositionChanged(object sender, EventArgs eventArgs)
+        public void RefreshHighlighting()
         {
+            if (_colorizer != null)
+            {
+                TextArea.TextView.LineTransformers.Remove(_colorizer);
+            }
+
+            if (_documentId != null && _roslynHost != null && _classificationHighlightColors != null)
+            {
+                _colorizer = new RoslynHighlightingColorizer(_documentId, _roslynHost, _classificationHighlightColors);
+                TextArea.TextView.LineTransformers.Insert(0, _colorizer);
+            }
+        }
+
+        private async void CaretOnPositionChanged(object? sender, EventArgs eventArgs)
+        {
+            if (_roslynHost == null || _documentId == null || _braceMatcherHighlighter == null)
+            {
+                return;
+            }
+
             _braceMatchingCts?.Cancel();
 
             if (_braceMatchingService == null) return;
@@ -132,6 +149,11 @@ namespace RoslynPad.Editor
             _braceMatchingCts = cts;
 
             var document = _roslynHost.GetDocument(_documentId);
+            if (document == null)
+            {
+                return;
+            }
+
             var text = await document.GetTextAsync().ConfigureAwait(false);
             var caretOffset = CaretOffset;
             if (caretOffset <= text.Length)
@@ -176,8 +198,18 @@ namespace RoslynPad.Editor
 
         private async Task OnAsyncToolTipRequest(ToolTipRequestEventArgs arg)
         {
+            if (_roslynHost == null || _documentId == null || _quickInfoProvider == null)
+            {
+                return;
+            }
+
             // TODO: consider invoking this with a delay, then showing the tool-tip without one
             var document = _roslynHost.GetDocument(_documentId);
+            if (document == null)
+            {
+                return;
+            }
+
             var info = await _quickInfoProvider.GetItemAsync(document, arg.Position, CancellationToken.None).ConfigureAwait(true);
             if (info != null)
             {
@@ -212,7 +244,13 @@ namespace RoslynPad.Editor
                     continue;
                 }
 
-                var marker = _textMarkerService.TryCreate(diagnosticData.TextSpan.Start, diagnosticData.TextSpan.Length);
+                var span = diagnosticData.GetTextSpan();
+                if (span == null)
+                {
+                    continue;
+                }
+
+                var marker = _textMarkerService.TryCreate(span.Value.Start, span.Value.Length);
                 if (marker != null)
                 {
                     marker.Tag = args.Id;
@@ -233,7 +271,7 @@ namespace RoslynPad.Editor
                 case DiagnosticSeverity.Error:
                     return Colors.Red;
                 default:
-                    throw new ArgumentOutOfRangeException();
+                    throw new ArgumentOutOfRangeException(nameof(diagnosticData));
             }
         }
 
@@ -266,6 +304,6 @@ namespace RoslynPad.Editor
 
         public Action<DiagnosticsUpdatedArgs> ProcessDiagnostics { get; }
 
-        public DocumentId DocumentId { get; set; }
+        public DocumentId? DocumentId { get; set; }
     }
 }

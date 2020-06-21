@@ -199,3 +199,7 @@ FakesAssemblies/
 *.lock.json
 RoslynPad.zip
 /lib
+*.binlog
+
+*.appx
+*.msix

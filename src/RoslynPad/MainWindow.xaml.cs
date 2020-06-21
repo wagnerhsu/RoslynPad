@@ -8,10 +8,10 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Xml.Linq;
 using Avalon.Windows.Controls;
+using AvalonDock;
+using AvalonDock.Layout.Serialization;
 using RoslynPad.UI;
 using RoslynPad.Utilities;
-using Xceed.Wpf.AvalonDock;
-using Xceed.Wpf.AvalonDock.Layout.Serialization;
 
 namespace RoslynPad
 {
@@ -24,7 +24,9 @@ namespace RoslynPad
         private bool _isClosing;
         private bool _isClosed;
 
-        internal MainWindow()
+#pragma warning disable CS8618 // Non-nullable field is uninitialized.
+        public MainWindow()
+#pragma warning restore CS8618 // Non-nullable field is uninitialized.
         {
             Loaded += OnLoaded;
 
@@ -161,7 +163,7 @@ namespace RoslynPad
 
         private void ViewErrorDetails_OnClick(object sender, RoutedEventArgs e)
         {
-            if (!_viewModel.HasError) return;
+            if (_viewModel.LastError == null) return;
 
             TaskDialog.ShowInline(this, "Unhandled Exception",
                 _viewModel.LastError.ToAsyncString(), string.Empty, TaskDialogButtons.Close);

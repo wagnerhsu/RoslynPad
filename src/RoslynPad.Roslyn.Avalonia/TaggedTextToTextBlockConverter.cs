@@ -1,14 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
-using Avalonia.Markup;
+using Avalonia.Data.Converters;
 using Microsoft.CodeAnalysis;
 
 namespace RoslynPad.Roslyn
 {
     public sealed class TaggedTextToTextBlockConverter : IValueConverter
     {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        public object? Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
             return (value as IEnumerable<TaggedText>)?.ToTextBlock();
         }

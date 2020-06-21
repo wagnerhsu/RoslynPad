@@ -1,0 +1,23 @@
+<Project>
+  <PropertyGroup>
+    <MSBuildAllProjects>$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
+  </PropertyGroup>
+  <PropertyGroup>
+    <Features>strict</Features>
+    <Deterministic>True</Deterministic>
+    <TreatWarningsAsErrors>True</TreatWarningsAsErrors>
+    <EditorPackageVersion>1.2.0</EditorPackageVersion>
+    <RoslynPackageVersion>3.5.0</RoslynPackageVersion>
+    <AvaloniaVersion>0.9.4</AvaloniaVersion>
+    <!--<EnableAvaloniaXamlCompilation>false</EnableAvaloniaXamlCompilation>-->
+    <RoslynAssemblyVersion>$(RoslynPackageVersion).0</RoslynAssemblyVersion>
+    <LangVersion>8.0</LangVersion>
+    <Nullable>Enable</Nullable>
+    <Authors>Eli Arbel</Authors>
+    <PackageProjectUrl>https://github.com/aelij/RoslynPad</PackageProjectUrl>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageTags>Roslyn;RoslynPad</PackageTags>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <SuppressNETCoreSdkPreviewMessage>true</SuppressNETCoreSdkPreviewMessage>
+  </PropertyGroup>
+</Project>

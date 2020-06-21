@@ -14,16 +14,17 @@ namespace RoslynPad.UI
         internal const string DefaultFileExtension = ".csx";
         internal const string AutoSaveSuffix = ".autosave";
 
-        private DocumentCollection _children;
         private bool _isExpanded;
         private bool? _isAutoSaveOnly;
         private bool _isSearchMatch;
         private string _path;
         private string _name;
-        private string _orderByName;
+        private string? _orderByName;
         private string _originalName;
 
+#pragma warning disable CS8618 // Non-nullable field is uninitialized.
         private DocumentViewModel(string rootPath, bool isFolder)
+#pragma warning restore CS8618 // Non-nullable field is uninitialized.
         {
             Path = rootPath;
             IsFolder = isFolder;
@@ -73,7 +74,7 @@ namespace RoslynPad.UI
         {
             return IsAutoSave
                 // ReSharper disable once AssignNullToNotNullAttribute
-                ? System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Path), Name + DefaultFileExtension)
+                ? System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Path)!, Name + DefaultFileExtension)
                 : Path;
         }
 
@@ -82,7 +83,7 @@ namespace RoslynPad.UI
             return IsAutoSave ?
                 Path
                 // ReSharper disable once AssignNullToNotNullAttribute
-                : System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Path), GetAutoSaveName(Name));
+                : System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Path)!, GetAutoSaveName(Name));
         }
 
         public static string GetAutoSaveName(string name)
@@ -168,27 +169,27 @@ namespace RoslynPad.UI
                 {
                     _isAutoSaveOnly = IsAutoSave &&
                                       // ReSharper disable once AssignNullToNotNullAttribute
-                                      !File.Exists(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Path), Name + DefaultFileExtension));
+                                      !File.Exists(System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Path)!, Name + DefaultFileExtension));
                 }
 
                 return _isAutoSaveOnly.Value;
             }
         }
 
-        public bool IsChildrenInitialized => _children != null;
+        public bool IsChildrenInitialized => InternalChildren != null;
 
-        internal DocumentCollection InternalChildren => _children;
+        internal DocumentCollection InternalChildren { get; private set; }
 
         public ObservableCollection<DocumentViewModel> Children
         {
             get
             {
-                if (IsFolder && _children == null)
+                if (IsFolder && InternalChildren == null)
                 {
-                    _children = ReadChildren();
+                    InternalChildren = ReadChildren();
                 }
 
-                return _children;
+                return InternalChildren;
             }
         }
 
